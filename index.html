@@ -206,6 +206,58 @@
   .room-count-ctrl .num{ font-size:20px; font-weight:800; min-width:24px; text-align:center; }
 
   .empty-note{ color:var(--text-faint); font-size:13px; }
+
+  /* ---------- Group chips (assessment group, admin-only) ---------- */
+  .group-chip{
+    display:none; font-size:10px; font-weight:800; padding:2px 8px; border-radius:999px;
+    text-transform:uppercase; letter-spacing:.03em; flex-shrink:0;
+  }
+  body.admin-mode .group-chip{ display:inline-flex; align-items:center; }
+  .group-chip.yellow{ background:#FEF3C7; color:#92650C; }
+  .group-chip.green{ background:var(--interviewing-tint); color:#0B7D53; }
+
+  .eligibility-note{ display:none; font-size:11px; color:var(--text-faint); margin-top:3px; font-weight:600; }
+  body.admin-mode .eligibility-note{ display:block; }
+
+  /* ---------- Group toggle (for Add Names) ---------- */
+  .group-toggle{ display:flex; gap:8px; margin:10px 0; }
+  .group-toggle-btn{
+    flex:1; padding:9px 10px; border-radius:10px; border:1px solid var(--border); background:#fff;
+    font-size:12.5px; font-weight:700; color:var(--text-muted); cursor:pointer; font-family:'Inter',sans-serif;
+  }
+  .group-toggle-btn.active[data-group="yellow"]{ background:#FEF3C7; border-color:#F5C542; color:#92650C; }
+  .group-toggle-btn.active[data-group="green"]{ background:var(--interviewing-tint); border-color:var(--interviewing); color:#0B7D53; }
+
+  /* ---------- Recap table ---------- */
+  .recap-table-wrap{ max-height:320px; overflow-y:auto; }
+  .recap-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  .recap-table th{
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint);
+    padding:8px 10px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--card);
+  }
+  .recap-table td{ padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .recap-table tbody tr:last-child td{ border-bottom:none; }
+
+  /* ---------- Room edit modal ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(10,14,30,.55); display:none;
+    align-items:center; justify-content:center; z-index:1000; padding:20px;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal-box{
+    background:#fff; border-radius:20px; padding:24px; width:360px; max-width:100%;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.35);
+  }
+  .modal-box h3{ margin:0 0 18px; font-size:16px; font-weight:800; }
+  .modal-field{ margin-bottom:14px; }
+  .modal-field label{ display:block; font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:6px; }
+  .modal-field input, .modal-field select{
+    width:100%; padding:9px 11px; border:1px solid var(--border); border-radius:10px;
+    font-family:'Inter',sans-serif; font-size:13.5px; outline:none; background:#F8F9FC;
+  }
+  .modal-field input:focus, .modal-field select:focus{ border-color:var(--blue); background:#fff; }
+  .modal-actions{ display:flex; gap:10px; margin-top:20px; }
+  .modal-actions .btn{ flex:1; justify-content:center; }
 </style>
 </head>
 <body>
@@ -245,10 +297,15 @@
     <div class="admin-grid">
       <div class="panel-card">
         <h3>Add Names (one per line)</h3>
+        <div class="group-toggle" id="groupToggle">
+          <button type="button" class="group-toggle-btn active" data-group="yellow">🟡 Yellow group</button>
+          <button type="button" class="group-toggle-btn" data-group="green">🟢 Green group</button>
+        </div>
         <textarea id="namesInput" placeholder="Example:&#10;John Smith&#10;Jane Doe&#10;Alex Johnson"></textarea>
         <div class="panel-row">
           <button class="btn primary" id="addNamesBtn" style="flex:1">Add to Queue</button>
         </div>
+        <p class="empty-note" style="margin-top:8px">Assessment group is only visible here in Control Panel — never shown to candidates or on the display screen.</p>
       </div>
 
       <div class="panel-card">
@@ -262,6 +319,45 @@
 
         <h3 style="margin-top:22px">Queue</h3>
         <div class="queue-list" id="queueList"></div>
+
+        <div style="margin-top:22px; padding-top:18px; border-top:1px dashed var(--border);">
+          <h3 style="color:var(--danger)">Reset Board</h3>
+          <p class="empty-note" style="margin-bottom:10px">Clears the queue, room statuses, and completed count. Room names & interviewers stay as-is.</p>
+          <button class="btn ghost" id="resetBoardBtn" style="border-color:var(--danger); color:var(--danger); width:100%; justify-content:center;">Reset Board</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-card" style="margin-top:20px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0;">Recap — Who interviewed with whom</h3>
+        <button class="btn ghost" id="downloadCsvBtn" style="padding:7px 12px; font-size:12px;">⬇ Download CSV</button>
+      </div>
+      <div class="recap-table-wrap" id="recapTable"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="roomEditModal">
+    <div class="modal-box">
+      <h3>Edit Room</h3>
+      <div class="modal-field">
+        <label>Room name</label>
+        <input type="text" id="modalRoomName" />
+      </div>
+      <div class="modal-field">
+        <label>Interviewer</label>
+        <input type="text" id="modalInterviewer" />
+      </div>
+      <div class="modal-field">
+        <label>Eligibility — which candidates can this room call?</label>
+        <select id="modalEligibility">
+          <option value="both">Yellow &amp; Green (both)</option>
+          <option value="yellow">Yellow only</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="modalCancelBtn">Cancel</button>
+        <button class="btn primary" id="modalSaveBtn">Save</button>
       </div>
     </div>
   </div>
@@ -290,14 +386,15 @@
   function defaultState(){
     return {
       rooms: [
-        { id: 1, name: 'Ruang 1', interviewer: '', status: 'available', candidate: null },
-        { id: 2, name: 'Ruang 2', interviewer: '', status: 'available', candidate: null },
-        { id: 3, name: 'Ruang 3', interviewer: '', status: 'available', candidate: null },
+        { id: 1, name: 'Ruang 1', interviewer: '', eligibility: 'both', status: 'available', candidate: null },
+        { id: 2, name: 'Ruang 2', interviewer: '', eligibility: 'both', status: 'available', candidate: null },
+        { id: 3, name: 'Ruang 3', interviewer: '', eligibility: 'both', status: 'available', candidate: null },
       ],
       queue: [],
       nextQueueId: 1,
       nextRoomId: 4,
       completed: 0,
+      history: [],
     };
   }
 
@@ -333,14 +430,21 @@
     eventDateEl.textContent = formatted;
   }
 
+  function migrateState(){
+    if(typeof state.completed !== 'number') state.completed = 0;
+    if(!Array.isArray(state.rooms)) state.rooms = [];
+    if(!Array.isArray(state.queue)) state.queue = [];
+    if(!Array.isArray(state.history)) state.history = [];
+    state.rooms.forEach(r => { if(!r.eligibility) r.eligibility = 'both'; });
+    state.queue.forEach(q => { if(!q.group) q.group = 'yellow'; });
+  }
+
   async function pullState(){
     try{
       const snap = await db.ref(STORAGE_KEY).once('value');
       if(snap.exists()){
         state = snap.val();
-        if(typeof state.completed !== 'number') state.completed = 0;
-        if(!Array.isArray(state.rooms)) state.rooms = [];
-        if(!Array.isArray(state.queue)) state.queue = [];
+        migrateState();
         setSyncBadge('Connected', true);
       } else {
         state = defaultState();
@@ -370,10 +474,23 @@
     if(!soundEnabled) return;
     if(!('speechSynthesis' in window)) return;
     try{
-      const utter = new SpeechSynthesisUtterance(`Next, ${candidateName}, please go to ${roomLabel}.`);
-      utter.lang = 'en-US';
-      utter.rate = 0.95;
-      window.speechSynthesis.speak(utter);
+      const part1 = new SpeechSynthesisUtterance('Next,');
+      part1.lang = 'en-US';
+      part1.rate = 0.95;
+      part1.pitch = 1.4;
+
+      const namePart = new SpeechSynthesisUtterance(candidateName);
+      namePart.lang = 'id-ID';
+      namePart.rate = 0.95;
+
+      const part2 = new SpeechSynthesisUtterance(`please go to ${roomLabel}.`);
+      part2.lang = 'en-US';
+      part2.rate = 0.95;
+
+      // Utterances queue automatically and play in order.
+      window.speechSynthesis.speak(part1);
+      window.speechSynthesis.speak(namePart);
+      window.speechSynthesis.speak(part2);
     } catch(err){ /* speech not available — fail silently */ }
   }
 
@@ -428,18 +545,22 @@
 
       let nameHtml;
       if(room.status === 'calling' && room.candidate){
-        nameHtml = `<div class="room-name status-calling"><span class="status-word">Calling</span>${escapeHtml(room.candidate.name)}</div>`;
+        nameHtml = `<div class="room-name status-calling"><span class="status-word">Calling</span>${escapeHtml(room.candidate.name)} ${groupChip(room.candidate.group)}</div>`;
       } else if(room.status === 'interviewing' && room.candidate){
-        nameHtml = `<div class="room-name status-interviewing"><span class="status-word">Interviewing</span>${escapeHtml(room.candidate.name)}</div>`;
+        nameHtml = `<div class="room-name status-interviewing"><span class="status-word">Interviewing</span>${escapeHtml(room.candidate.name)} ${groupChip(room.candidate.group)}</div>`;
       } else {
         nameHtml = `<div class="room-name empty">No candidate yet</div>`;
       }
 
+      const allowedGroups = room.eligibility === 'yellow' ? ['yellow'] : ['yellow', 'green'];
+      const eligibleCount = state.queue.filter(c => allowedGroups.includes(c.group || 'yellow')).length;
+
       let actionsHtml = '';
       if(room.status === 'available'){
-        const disabled = state.queue.length === 0 ? 'disabled' : '';
+        const disabled = eligibleCount === 0 ? 'disabled' : '';
+        const title = eligibleCount === 0 ? 'title="No eligible candidates waiting"' : '';
         actionsHtml = `<div class="room-actions">
-          <button class="btn primary" ${disabled} onclick="callNext(${room.id})">Call Next</button>
+          <button class="btn primary" ${disabled} ${title} onclick="callNext(${room.id})">Call Next</button>
         </div>`;
       } else if(room.status === 'calling'){
         actionsHtml = `<div class="room-actions">
@@ -461,6 +582,7 @@
             <div>
               <div class="room-label">${escapeHtml(room.name || ('Room ' + room.id))}</div>
               <div class="room-interviewer">${room.interviewer ? escapeHtml(room.interviewer) : 'Interviewer not set'}</div>
+              <div class="eligibility-note">Eligible: ${room.eligibility === 'yellow' ? 'Yellow only' : 'Yellow &amp; Green'}</div>
             </div>
           </div>
           <span class="badge ${room.status}"><span class="dot"></span>${statusLabel(room.status)}</span>
@@ -506,6 +628,7 @@
         row.className = 'queue-row';
         row.innerHTML = `
           <span class="pos">${i+1}</span>
+          ${groupChip(q.group)}
           <span class="qname">${escapeHtml(q.name)}</span>
           <button class="icon-btn" title="Move up" ${i===0?'disabled':''} onclick="moveQueue(${i},-1)">↑</button>
           <button class="icon-btn" title="Move down" ${i===state.queue.length-1?'disabled':''} onclick="moveQueue(${i},1)">↓</button>
@@ -516,6 +639,32 @@
     }
 
     checkAnnouncements();
+    renderRecap();
+  }
+
+  function renderRecap(){
+    const recapEl = document.getElementById('recapTable');
+    if(!recapEl) return;
+    const history = state.history || [];
+    if(history.length === 0){
+      recapEl.innerHTML = '<p class="empty-note">No calls yet.</p>';
+      return;
+    }
+    const rows = history.map(h => `
+      <tr>
+        <td>${new Date(h.calledAt).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'})}</td>
+        <td>${escapeHtml(h.candidateName)}</td>
+        <td>${groupChip(h.group)}</td>
+        <td>${escapeHtml(h.roomName)}</td>
+        <td>${h.interviewer ? escapeHtml(h.interviewer) : '—'}</td>
+      </tr>
+    `).join('');
+    recapEl.innerHTML = `
+      <table class="recap-table">
+        <thead><tr><th>Time</th><th>Candidate</th><th>Group</th><th>Room</th><th>Interviewer</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
   }
 
   function escapeHtml(str){
@@ -524,53 +673,105 @@
     return d.innerHTML;
   }
 
-  function showConflictNotice(msg){
+  function groupChip(group){
+    const g = group === 'green' ? 'green' : 'yellow';
+    const label = g === 'green' ? 'Green' : 'Yellow';
+    return `<span class="group-chip ${g}">${label}</span>`;
+  }
+
+  function showConflictNotice(msg, type){
     let el = document.getElementById('conflictNotice');
     if(!el){
       el = document.createElement('div');
       el.id = 'conflictNotice';
-      el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--danger);color:#fff;font-weight:700;padding:12px 20px;border-radius:12px;z-index:999;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);';
+      el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);color:#fff;font-weight:700;padding:12px 20px;border-radius:12px;z-index:999;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);';
       document.body.appendChild(el);
     }
+    el.style.background = type === 'success' ? 'var(--interviewing)' : 'var(--danger)';
     el.textContent = msg;
     el.style.display = 'block';
     clearTimeout(el._t);
     el._t = setTimeout(() => { el.style.display = 'none'; }, 4000);
   }
 
+  let editingRoomId = null;
+
   async function editRoom(roomId){
     if(!isAdmin) return;
     await pullState();
     const room = state.rooms.find(r => r.id === roomId);
     if(!room) return;
+    editingRoomId = roomId;
+    document.getElementById('modalRoomName').value = room.name || ('Room ' + roomId);
+    document.getElementById('modalInterviewer').value = room.interviewer || '';
+    document.getElementById('modalEligibility').value = room.eligibility || 'both';
+    document.getElementById('roomEditModal').classList.add('open');
+  }
 
-    const newName = window.prompt('Room name:', room.name || ('Room ' + room.id));
-    if(newName === null) return;
-    const newInterviewer = window.prompt('Interviewer name:', room.interviewer || '');
-    if(newInterviewer === null) return;
+  function closeRoomEditModal(){
+    document.getElementById('roomEditModal').classList.remove('open');
+    editingRoomId = null;
+  }
+
+  document.getElementById('modalCancelBtn').addEventListener('click', closeRoomEditModal);
+  document.getElementById('roomEditModal').addEventListener('click', (e) => {
+    if(e.target.id === 'roomEditModal') closeRoomEditModal();
+  });
+
+  document.getElementById('modalSaveBtn').addEventListener('click', async () => {
+    if(editingRoomId === null) return;
+    const roomId = editingRoomId;
+    const nameVal = document.getElementById('modalRoomName').value.trim();
+    const interviewerVal = document.getElementById('modalInterviewer').value.trim();
+    const eligibilityVal = document.getElementById('modalEligibility').value;
+    closeRoomEditModal();
 
     await pullState();
     const fresh = state.rooms.find(r => r.id === roomId);
     if(!fresh) return;
-    fresh.name = newName.trim() || ('Room ' + roomId);
-    fresh.interviewer = newInterviewer.trim();
+    fresh.name = nameVal || ('Room ' + roomId);
+    fresh.interviewer = interviewerVal;
+    fresh.eligibility = eligibilityVal;
     await commit();
-  }
+  });
 
   async function callNext(roomId){
     if(!isAdmin) return;
     await pullState();
     const room = state.rooms.find(r => r.id === roomId);
-    if(!room || room.status !== 'available' || state.queue.length === 0) return;
-    const candidate = state.queue.shift();
+    if(!room || room.status !== 'available') return;
+
+    const groupPriority = room.eligibility === 'yellow' ? ['yellow'] : ['green', 'yellow'];
+    let idx = -1;
+    for(const g of groupPriority){
+      idx = state.queue.findIndex(c => (c.group || 'yellow') === g);
+      if(idx !== -1) break;
+    }
+    if(idx === -1){
+      showConflictNotice('No eligible candidates waiting for this room.');
+      return;
+    }
+    const candidate = state.queue.splice(idx, 1)[0];
     room.status = 'calling';
     room.candidate = candidate;
+
+    state.history = state.history || [];
+    state.history.unshift({
+      id: 'h' + Date.now() + '-' + roomId,
+      candidateName: candidate.name,
+      group: candidate.group || 'yellow',
+      roomId: room.id,
+      roomName: room.name || ('Room ' + room.id),
+      interviewer: room.interviewer || '',
+      calledAt: Date.now()
+    });
+
     await pushState();
 
     const check = await db.ref(STORAGE_KEY).once('value').catch(() => null);
     if(check && check.exists()){
       const latest = check.val();
-      const latestRoom = latest.rooms.find(r => r.id === roomId);
+      const latestRoom = (latest.rooms || []).find(r => r.id === roomId);
       if(!latestRoom || !latestRoom.candidate || latestRoom.candidate.id !== candidate.id){
         showConflictNotice(`Conflict! ${candidate.name} was just called by another room — click again for the next candidate.`);
         await pullState();
@@ -627,12 +828,79 @@
     await commit();
   }
 
+  function csvEscape(val){
+    const s = String(val ?? '');
+    if(/[",\n]/.test(s)){
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  function downloadRecapCSV(){
+    const history = state.history || [];
+    if(history.length === 0){
+      showConflictNotice('No recap data to download yet.');
+      return;
+    }
+    const header = ['Date', 'Time', 'Candidate', 'Group', 'Room', 'Interviewer'];
+    const rows = history.map(h => {
+      const d = new Date(h.calledAt);
+      return [
+        d.toLocaleDateString('en-US'),
+        d.toLocaleTimeString('en-US'),
+        h.candidateName,
+        h.group === 'green' ? 'Green' : 'Yellow',
+        h.roomName,
+        h.interviewer || ''
+      ];
+    });
+    const csv = [header, ...rows].map(row => row.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `interview-recap-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById('downloadCsvBtn').addEventListener('click', downloadRecapCSV);
+
+  document.getElementById('resetBoardBtn').addEventListener('click', async () => {
+    if(!isAdmin) return;
+    const sure = window.confirm('Reset the board? This clears the queue, the recap history, sets every room back to Available, and resets the completed count to 0. Room names, interviewers, and eligibility settings will stay. This cannot be undone.');
+    if(!sure) return;
+    await pullState();
+    state.queue = [];
+    state.completed = 0;
+    state.history = [];
+    state.rooms.forEach(r => {
+      r.status = 'available';
+      r.candidate = null;
+    });
+    lastKnownCalling = {};
+    await commit();
+    showConflictNotice('Board has been reset.', 'success');
+  });
+
+  let selectedAddGroup = 'yellow';
+  document.querySelectorAll('.group-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedAddGroup = btn.dataset.group;
+      document.querySelectorAll('.group-toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
   document.getElementById('addNamesBtn').addEventListener('click', async () => {
     if(!isAdmin) return;
     await pullState();
     const textarea = document.getElementById('namesInput');
     const names = textarea.value.split('\n').map(n => n.trim()).filter(Boolean);
-    names.forEach(name => state.queue.push({ id: state.nextQueueId++, name }));
+    names.forEach(name => state.queue.push({ id: state.nextQueueId++, name, group: selectedAddGroup }));
     textarea.value = '';
     await commit();
   });
@@ -640,7 +908,7 @@
   document.getElementById('roomPlus').addEventListener('click', async () => {
     if(!isAdmin) return;
     await pullState();
-    state.rooms.push({ id: state.nextRoomId, name: 'Room ' + state.nextRoomId, interviewer: '', status: 'available', candidate: null });
+    state.rooms.push({ id: state.nextRoomId, name: 'Room ' + state.nextRoomId, interviewer: '', eligibility: 'both', status: 'available', candidate: null });
     state.nextRoomId++;
     await commit();
   });
@@ -695,9 +963,7 @@
   db.ref(STORAGE_KEY).on('value', (snap) => {
     if(snap.exists()){
       state = snap.val();
-      if(typeof state.completed !== 'number') state.completed = 0;
-      if(!Array.isArray(state.rooms)) state.rooms = [];
-      if(!Array.isArray(state.queue)) state.queue = [];
+      migrateState();
       setSyncBadge('Connected', true);
       render();
     } else {
