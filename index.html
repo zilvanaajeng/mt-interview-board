@@ -564,6 +564,7 @@
         </div>`;
       } else if(room.status === 'calling'){
         actionsHtml = `<div class="room-actions">
+          <button class="btn ghost" onclick="repeatCall(${room.id})">🔁 Call Again</button>
           <button class="btn primary" onclick="markEntered(${room.id})">Mark Entered</button>
           <button class="btn ghost" onclick="skipCandidate(${room.id})">No Show</button>
         </div>`;
@@ -603,10 +604,10 @@
     if(state.queue.length === 0){
       queueStripEl.innerHTML = '<div class="queue-empty">All candidates have been called.</div>';
     } else {
-      state.queue.slice(0, VISIBLE_LIMIT).forEach((q, i) => {
+      state.queue.slice(0, VISIBLE_LIMIT).forEach((q) => {
         const t = document.createElement('div');
         t.className = 'ticket';
-        t.innerHTML = `<span class="num">${i+1}</span><span class="name">${escapeHtml(q.name)}</span>`;
+        t.innerHTML = `<span class="name">${escapeHtml(q.name)}</span>`;
         queueStripEl.appendChild(t);
       });
       if(state.queue.length > VISIBLE_LIMIT){
@@ -779,6 +780,13 @@
       }
     }
     render();
+  }
+
+  function repeatCall(roomId){
+    if(!isAdmin) return;
+    const room = state.rooms.find(r => r.id === roomId);
+    if(!room || room.status !== 'calling' || !room.candidate) return;
+    speakCall(room.candidate.name, room.name || ('Room ' + room.id));
   }
 
   async function markEntered(roomId){
